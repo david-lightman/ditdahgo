@@ -279,6 +279,16 @@
             </div>
         </div>
 
+        <div class="keying-config-card">
+            <div class="keying-config-header">
+                <div>
+                    <p class="section-kicker">About</p>
+                    <h3>Privacy and transport</h3>
+                </div>
+            </div>
+            <p class="field-help">WebRTC encrypts peer traffic in transit. Signaling privacy depends on HTTPS for the signaling server, and stronger client authentication or end-to-end trust checks are still future work.</p>
+        </div>
+
         <section class="activity-panel panel-shell settings-log-panel" aria-label="Activity log">
             <button id="btn-toggle-activity-log" class="activity-toggle" type="button" aria-expanded="false">
                 <span>
@@ -294,30 +304,31 @@
     </aside>
 
     <main class="chat-layout">
-        <section class="chat-shell panel-shell" aria-label="Chat">
+        <div id="chat-workbench" class="chat-workbench">
+        <section id="chat-shell" class="chat-shell panel-shell" aria-label="Chat">
             <div class="chat-header">
-                <div>
+                <div class="chat-header-main">
                     <h2>Chat</h2>
                 </div>
-                <p id="chat-status-line" class="panel-note">Offline</p>
+                <p id="chat-status-line" class="panel-note hidden">Offline</p>
             </div>
 
-            <div id="chat-empty-state" class="timeline-empty-state chat-empty-state">
-                <p class="empty-title">Nothing in the thread yet.</p>
-                <p class="empty-copy">Messages you type will appear here.</p>
-            </div>
+            <div class="chat-main-split">
+                <section class="chat-thread-panel">
+                    <div id="chat-empty-state" class="timeline-empty-state chat-empty-state">
+                        <p class="empty-title">Nothing in the thread yet.</p>
+                        <p class="empty-copy">Messages you type will appear here.</p>
+                    </div>
 
-            <div id="chat-log" class="chat-feed" aria-live="polite"></div>
+                    <div id="chat-log" class="chat-feed" aria-live="polite" tabindex="0"></div>
+                </section>
+            </div>
 
             <section class="input-panel chat-composer-shell" aria-label="Input dock">
                 <div class="chat-composer-toolbar">
-                    <div class="send-meta">
-                        <span id="keying-mode-badge" class="mode-badge mode-badge-active">Straight key</span>
-                        <span id="wpm-pill" class="wpm-pill">18 WPM</span>
-                        <span id="keying-summary" class="mode-badge mode-badge-live">Right Shift</span>
-                    </div>
                     <div class="composer-toolbar-actions">
-                        <span id="topbar-connection-badge" class="status-badge status-idle">Disconnected</span>
+                        <span id="topbar-connection-badge" class="status-badge status-offline">Not connected</span>
+                        <button id="btn-open-glossary" class="ghost-button small-button hidden" type="button">Show glossary</button>
                         <span id="session-chip" class="mode-badge mode-badge-live hidden">Session <span id="session-chip-value">-</span></span>
                         <button id="btn-open-keying-settings" class="ghost-button small-button" type="button">Settings</button>
                     </div>
@@ -333,20 +344,43 @@
                     </div>
 
                     <div class="key-surface-card key-surface-card-compact">
-                        <div class="key-surface-header">
-                            <span id="key-surface-title" class="key-surface-title">Straight key</span>
-                            <span class="status-label">CW</span>
+                        <div class="key-surface-meta">
+                            <span id="keying-mode-badge" class="mode-badge mode-badge-active">Straight key</span>
+                            <span id="wpm-pill" class="wpm-pill">18 WPM</span>
+                            <span id="keying-summary" class="mode-badge mode-badge-live">Right Shift</span>
                         </div>
                         <button id="btn-key-surface" class="key-surface key-surface-compact" type="button">
-                            <span id="key-surface-copy" class="key-surface-copy">Hold your bound key to send.</span>
+                            <div class="key-surface-lights" aria-hidden="true">
+                                <span id="key-light-dit" class="key-light"></span>
+                                <span id="key-light-dah" class="key-light"></span>
+                            </div>
+                            <div class="key-preview-row key-preview-row-compact">
+                                <div id="key-preview" class="key-preview key-preview-display"></div>
+                            </div>
                         </button>
-                        <div class="key-preview-row key-preview-row-compact">
-                            <div id="key-preview" class="key-preview">No keying yet</div>
-                        </div>
                     </div>
                 </div>
             </section>
         </section>
+
+        <div id="panel-resizer" class="panel-resizer" aria-hidden="true"></div>
+
+        <aside class="glossary-shell panel-shell" aria-label="Code glossary">
+            <div class="glossary-header">
+                <div class="glossary-header-main">
+                    <div>
+                        <p class="section-kicker">Reference</p>
+                        <h2>Morse glossary</h2>
+                    </div>
+                    <button id="btn-collapse-glossary" class="ghost-button small-button" type="button" aria-label="Collapse glossary">Hide</button>
+                </div>
+                <p id="glossary-meta" class="panel-note">Click any entry to send it.</p>
+            </div>
+
+            <div id="glossary-tabs" class="glossary-tabs" role="tablist" aria-label="Glossary sections"></div>
+            <div id="glossary-sections" class="glossary-sections" tabindex="0"></div>
+        </aside>
+        </div>
     </main>
 </div>
 

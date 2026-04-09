@@ -1,0 +1,102 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            artifact_name: dit-dah-go-macos-universal.tar.gz
+            shell: bash
+          - os: ubuntu-latest
+            artifact_name: dit-dah-go-linux-amd64.tar.gz
+            shell: bash
+          - os: windows-latest
+            artifact_name: dit-dah-go-windows-amd64.zip
+            shell: pwsh
+
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        working-directory: app
+        shell: ${{ matrix.shell }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: app/frontend/package-lock.json
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+
+      - name: Build macOS app
+        if: runner.os == 'macOS'
+        run: |
+          "$(go env GOPATH)/bin/wails" build -clean
+          mkdir -p ../release-assets
+          tar -C build/bin -czf ../release-assets/${{ matrix.artifact_name }} dit-dah-go.app
+
+      - name: Build Linux app
+        if: runner.os == 'Linux'
+        run: |
+          "$(go env GOPATH)/bin/wails" build -clean -tags webkit2_41
+          mkdir -p ../release-assets
+          tar -C build/bin -czf ../release-assets/${{ matrix.artifact_name }} dit-dah-go
+
+      - name: Build Windows app
+        if: runner.os == 'Windows'
+        run: |
+          $wails = Join-Path (go env GOPATH) 'bin/wails.exe'
+          & $wails build -clean
+          New-Item -ItemType Directory -Force -Path ../release-assets | Out-Null
+          Compress-Archive -Path build/bin/dit-dah-go.exe -DestinationPath ../release-assets/${{ matrix.artifact_name }} -Force
+
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: release-assets/${{ matrix.artifact_name }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true

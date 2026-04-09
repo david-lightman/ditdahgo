@@ -12,6 +12,12 @@ const btnJoin = document.getElementById('btn-join');
 const btnCopySession = document.getElementById('btn-copy-session');
 const btnCloseSettings = document.getElementById('btn-close-settings');
 const btnOpenKeyingSettings = document.getElementById('btn-open-keying-settings');
+const btnOpenGlossary = document.getElementById('btn-open-glossary');
+const btnCollapseGlossary = document.getElementById('btn-collapse-glossary');
+const panelResizer = document.getElementById('panel-resizer');
+const glossaryTabs = document.getElementById('glossary-tabs');
+const glossaryMeta = document.getElementById('glossary-meta');
+const glossarySections = document.getElementById('glossary-sections');
 const btnBindStraight = document.getElementById('btn-bind-straight');
 const btnBindDit = document.getElementById('btn-bind-dit');
 const btnBindDah = document.getElementById('btn-bind-dah');
@@ -43,8 +49,8 @@ const chatStatusLine = document.getElementById('chat-status-line');
 const chatEmptyState = document.getElementById('chat-empty-state');
 const composerHint = document.getElementById('composer-hint');
 const btnKeySurface = document.getElementById('btn-key-surface');
-const keySurfaceTitle = document.getElementById('key-surface-title');
-const keySurfaceCopy = document.getElementById('key-surface-copy');
+const keyLightDit = document.getElementById('key-light-dit');
+const keyLightDah = document.getElementById('key-light-dah');
 const keyingModeBadge = document.getElementById('keying-mode-badge');
 const keyingSummary = document.getElementById('keying-summary');
 const keyingStatus = document.getElementById('keying-status');
@@ -80,6 +86,8 @@ const sessionChip = document.getElementById('session-chip');
 const sessionChipValue = document.getElementById('session-chip-value');
 
 const chatLog = document.getElementById('chat-log');
+const chatWorkbench = document.getElementById('chat-workbench');
+const glossaryShell = document.querySelector('.glossary-shell');
 const inputChat = document.getElementById('input-chat');
 const btnSend = document.getElementById('btn-send');
 const isMacOS = navigator.platform.toLowerCase().includes('mac');
@@ -115,6 +123,9 @@ const defaultDisplayConfig = {
     chatFontSize: 15,
     cwChatPauseMs: 3000,
 };
+const defaultGlossaryWidth = 390;
+const minGlossaryWidth = 320;
+const maxGlossaryWidth = 560;
 const cwUnknownToken = '<?>';
 const iambicModeBehavior = 'A';
 const morseAlphabet = {
@@ -154,12 +165,33 @@ const morseAlphabet = {
     '--...': '7',
     '---..': '8',
     '----.': '9',
+    '.-.-.-': '.',
+    '--..--': ',',
+    '..--..': '?',
+    '.----.': "'",
+    '-..-.': '/',
+    '-.--.': '(',
+    '-.--.-': ')',
+    '.-...': '&',
+    '---...': ':',
+    '-.-.-.': ';',
+    '-...-': '=',
+    '.-.-.': '+',
+    '-....-': '-',
+    '..--.-': '_',
+    '.-..-.': '"',
+    '...-..-': '$',
+    '.--.-.': '@',
+    '-.-.--': '!',
 };
+const morseByCharacter = buildMorseByCharacterMap();
+const defaultGlossarySections = createDefaultGlossarySections();
 const savedSignalUrl = window.localStorage.getItem('signalServerURL');
 const savedDisplayName = window.localStorage.getItem('displayName') || '';
 const savedKeyConfig = readKeyConfig();
 const savedAudioConfig = readAudioConfig();
 const savedDisplayConfig = readDisplayConfig();
+const savedGlossaryMnemonics = readGlossaryMnemonics();
 inputSignalUrl.value = savedSignalUrl || defaultSignalUrl;
 inputDisplayName.value = savedDisplayName;
 selectKeyingMode.value = savedKeyConfig.mode;
@@ -189,6 +221,10 @@ let audioContext = null;
 let localOscillator = null;
 let localGainNode = null;
 let activityLogCount = 0;
+let activeGlossarySectionId = 'alphabet';
+let glossaryVisible = true;
+let glossaryWidth = readGlossaryWidth();
+let localPlaybackQueue = Promise.resolve();
 let remotePlaybackQueue = Promise.resolve();
 const cwStreams = {
     local: createCWStreamState(),
@@ -202,6 +238,8 @@ renderKeyConfig();
 renderShortcutConfig();
 renderAudioConfig();
 renderDisplayConfig();
+renderGlossaryPanel();
+applyGlossaryWidth();
 addSystemEntry('App ready. Open Settings when you want to connect.');
 
 // --- Button Event Listeners ---
@@ -291,8 +329,14 @@ btnCopySession.addEventListener('click', async () => {
 
 btnCloseSettings.addEventListener('click', closeSettingsDrawer);
 btnOpenKeyingSettings.addEventListener('click', openSettingsDrawer);
+btnOpenGlossary.addEventListener('click', () => setGlossaryVisible(true));
+btnCollapseGlossary.addEventListener('click', () => setGlossaryVisible(false));
+panelResizer.addEventListener('pointerdown', beginGlossaryResize);
 settingsOverlay.addEventListener('click', closeSettingsDrawer);
 btnToggleActivityLog.addEventListener('click', toggleActivityLog);
+glossaryTabs.addEventListener('click', handleGlossaryTabClick);
+glossarySections.addEventListener('click', handleGlossaryClick);
+glossarySections.addEventListener('change', handleGlossaryMnemonicChange);
 btnToggleDecodeCW.addEventListener('click', () => {
     savedDisplayConfig.decodeCWStream = !savedDisplayConfig.decodeCWStream;
     persistDisplayConfig();
@@ -416,6 +460,7 @@ inputRemoteVolume.addEventListener('input', async () => {
 
 window.addEventListener('keydown', handleGlobalKeyDown, true);
 window.addEventListener('keyup', handleGlobalKeyUp, true);
+document.addEventListener('focusin', handleDocumentFocusIn, true);
 
 btnKeySurface.addEventListener('pointerdown', (event) => {
     if (savedKeyConfig.mode !== 'straight') {
@@ -688,7 +733,7 @@ function badgeClassForState(state) {
         case 'error':
             return 'status-danger';
         default:
-            return 'status-idle';
+            return 'status-offline';
     }
 }
 
@@ -759,6 +804,47 @@ function readDisplayConfig() {
     }
 }
 
+function readGlossaryMnemonics() {
+    try {
+        const raw = window.localStorage.getItem('cwGlossaryMnemonics');
+        if (!raw) {
+            return {};
+        }
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') {
+            return {};
+        }
+
+        const sanitized = {};
+        for (const [key, value] of Object.entries(parsed)) {
+            if (typeof value !== 'string') {
+                continue;
+            }
+
+            const trimmed = value.trim();
+            if (trimmed) {
+                sanitized[key] = trimmed;
+            }
+        }
+
+        return sanitized;
+    } catch {
+        return {};
+    }
+}
+
+function readGlossaryWidth() {
+    try {
+        const raw = Number(window.localStorage.getItem('cwGlossaryWidth'));
+        if (!Number.isFinite(raw)) {
+            return defaultGlossaryWidth;
+        }
+        return Math.max(minGlossaryWidth, Math.min(maxGlossaryWidth, raw));
+    } catch {
+        return defaultGlossaryWidth;
+    }
+}
+
 function persistKeyConfig() {
     window.localStorage.setItem('cwKeyConfig', JSON.stringify(savedKeyConfig));
 }
@@ -775,6 +861,14 @@ function persistDisplayConfig() {
     window.localStorage.setItem('cwDisplayConfig', JSON.stringify(savedDisplayConfig));
 }
 
+function persistGlossaryMnemonics() {
+    window.localStorage.setItem('cwGlossaryMnemonics', JSON.stringify(savedGlossaryMnemonics));
+}
+
+function persistGlossaryWidth() {
+    window.localStorage.setItem('cwGlossaryWidth', String(Math.round(glossaryWidth)));
+}
+
 function renderKeyConfig() {
     displayStraightKey.innerText = humanizeCode(savedKeyConfig.straightKey);
     displayDitKey.innerText = humanizeCode(savedKeyConfig.ditKey);
@@ -785,17 +879,13 @@ function renderKeyConfig() {
     keyingSummary.innerText = savedKeyConfig.mode === 'straight'
         ? humanizeCode(savedKeyConfig.straightKey)
         : humanizeCode(savedKeyConfig.ditKey) + ' / ' + humanizeCode(savedKeyConfig.dahKey);
-    keySurfaceTitle.innerText = savedKeyConfig.mode === 'straight' ? 'Manual straight key' : 'Iambic paddles';
-    keySurfaceCopy.innerText = savedKeyConfig.mode === 'straight'
-        ? 'Press and hold ' + humanizeCode(savedKeyConfig.straightKey) + ' to send CW based on key-down duration.'
-        : 'Hold ' + humanizeCode(savedKeyConfig.ditKey) + ' for dits and ' + humanizeCode(savedKeyConfig.dahKey) + ' for dahs. Press both to alternate.';
     keyingStatus.innerText = pendingKeyBind
         ? 'Press a key to bind ' + bindingLabel(pendingKeyBind) + '.'
         : savedKeyConfig.mode === 'straight'
             ? 'Straight key is mapped to ' + humanizeCode(savedKeyConfig.straightKey) + '.'
             : 'Iambic mode is mapped to ' + humanizeCode(savedKeyConfig.ditKey) + ' and ' + humanizeCode(savedKeyConfig.dahKey) + '.';
     iambicBindings.classList.toggle('hidden', savedKeyConfig.mode !== 'iambic');
-    updatePreview(lastPreview || 'No keying yet');
+    updatePreview(lastPreview || '');
 }
 
 function renderShortcutConfig() {
@@ -832,12 +922,144 @@ function renderDisplayConfig() {
     document.documentElement.style.setProperty('--chat-font-size', savedDisplayConfig.chatFontSize + 'px');
 }
 
+function renderGlossaryPanel() {
+    const totalEntries = defaultGlossarySections.reduce((count, section) => count + section.entries.length, 0);
+    const activeSection = getActiveGlossarySection();
+    glossaryMeta.innerText = totalEntries + ' sendable entries';
+    glossaryTabs.innerHTML = defaultGlossarySections.map((section) => renderGlossaryTab(section)).join('');
+    glossarySections.innerHTML = activeSection.entries.map((entry, entryIndex) => renderGlossaryEntry(activeSection, entry, entryIndex)).join('');
+    renderGlossaryVisibility();
+}
+
+function renderGlossaryTab(section) {
+    const active = section.id === activeGlossarySectionId;
+    return '<button class="glossary-tab-button' + (active ? ' is-active' : '') + '" type="button" role="tab" aria-selected="' + (active ? 'true' : 'false') + '" data-section-id="' + escapeHtml(section.id) + '">' + escapeHtml(section.title) + '</button>';
+}
+
+function renderGlossaryEntry(section, entry, entryIndex) {
+    const mnemonic = getGlossaryMnemonic(section, entry);
+    return '<article class="glossary-entry">' +
+        '<button class="glossary-send" type="button" data-section-id="' + escapeHtml(section.id) + '" data-entry-index="' + entryIndex + '">' +
+            '<span class="glossary-entry-symbol">' + escapeHtml(entry.text) + '</span>' +
+        '</button>' +
+        '<div class="glossary-entry-code">' + escapeHtml(entry.code) + '</div>' +
+        (section.editable
+            ? '<input class="glossary-mnemonic-input" type="text" data-section-id="' + escapeHtml(section.id) + '" data-entry-text="' + escapeHtml(entry.text) + '" value="' + escapeHtml(mnemonic) + '" placeholder="Mnemonic cue" autocomplete="off">'
+            : '<div class="glossary-note-pill" title="' + escapeHtml(entry.note || mnemonic || 'Click to send at current WPM.') + '">' + escapeHtml(mnemonic || entry.note || 'Click to send at current WPM.') + '</div>') +
+    '</article>';
+}
+
+function getGlossaryMnemonic(section, entry) {
+    const key = glossaryMnemonicKey(section.id, entry.text);
+    const savedMnemonic = savedGlossaryMnemonics[key];
+    if (typeof savedMnemonic === 'string' && savedMnemonic.trim()) {
+        return savedMnemonic.trim();
+    }
+    return entry.mnemonic ?? '';
+}
+
+function glossaryMnemonicKey(sectionId, entryText) {
+    return sectionId + ':' + entryText;
+}
+
+function getActiveGlossarySection() {
+    return defaultGlossarySections.find((section) => section.id === activeGlossarySectionId) || defaultGlossarySections[0];
+}
+
+function setGlossaryVisible(visible) {
+    glossaryVisible = visible;
+    renderGlossaryVisibility();
+}
+
+function renderGlossaryVisibility() {
+    chatWorkbench.classList.toggle('glossary-hidden', !glossaryVisible);
+    btnOpenGlossary.classList.toggle('hidden', glossaryVisible);
+}
+
+function applyGlossaryWidth() {
+    chatWorkbench.style.setProperty('--glossary-width', Math.round(glossaryWidth) + 'px');
+}
+
+function beginGlossaryResize(event) {
+    if (!glossaryVisible || window.innerWidth <= 900) {
+        return;
+    }
+
+    event.preventDefault();
+
+    const handlePointerMove = (moveEvent) => {
+        const bounds = chatWorkbench.getBoundingClientRect();
+        const maxWidth = Math.min(maxGlossaryWidth, Math.max(minGlossaryWidth, bounds.width - 320));
+        glossaryWidth = Math.max(minGlossaryWidth, Math.min(maxWidth, bounds.right - moveEvent.clientX));
+        applyGlossaryWidth();
+    };
+
+    const finishResize = () => {
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', finishResize);
+        document.body.style.cursor = '';
+        persistGlossaryWidth();
+    };
+
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', finishResize);
+}
+
 function beginKeyBinding(target) {
     pendingShortcutBind = '';
     shortcutNotice = '';
     pendingKeyBind = target;
     renderShortcutConfig();
     renderKeyConfig();
+}
+
+function handleGlossaryTabClick(event) {
+    const button = event.target.closest('.glossary-tab-button');
+    if (!button) {
+        return;
+    }
+
+    activeGlossarySectionId = button.dataset.sectionId || 'alphabet';
+    renderGlossaryPanel();
+}
+
+function handleGlossaryClick(event) {
+    const button = event.target.closest('.glossary-send');
+    if (!button) {
+        return;
+    }
+
+    const sectionId = button.dataset.sectionId || activeGlossarySectionId;
+    const entryIndex = Number(button.dataset.entryIndex);
+    const section = defaultGlossarySections.find((item) => item.id === sectionId);
+    const entry = section?.entries?.[entryIndex];
+    if (!section || !entry) {
+        return;
+    }
+
+    void sendGlossaryEntry(section, entry);
+}
+
+function handleGlossaryMnemonicChange(event) {
+    const input = event.target.closest('.glossary-mnemonic-input');
+    if (!input) {
+        return;
+    }
+
+    const value = input.value.trim();
+    const key = glossaryMnemonicKey(input.dataset.sectionId || '', input.dataset.entryText || '');
+    if (value) {
+        savedGlossaryMnemonics[key] = value;
+    } else {
+        delete savedGlossaryMnemonics[key];
+
+        const section = defaultGlossarySections.find((candidate) => candidate.id === (input.dataset.sectionId || ''));
+        const entry = section?.entries.find((candidate) => candidate.text === (input.dataset.entryText || ''));
+        input.value = entry?.mnemonic || '';
+    }
+
+    persistGlossaryMnemonics();
 }
 
 function beginShortcutBinding(target) {
@@ -875,6 +1097,11 @@ function handleGlobalKeyDown(event) {
         return;
     }
 
+    if (shouldSuppressKeyingForEvent(event)) {
+        cancelActiveKeying();
+        return;
+    }
+
     if (savedKeyConfig.mode === 'straight' && event.code === savedKeyConfig.straightKey) {
         event.preventDefault();
         if (!event.repeat && !straightKeyDownAt) {
@@ -882,7 +1109,7 @@ function handleGlobalKeyDown(event) {
             clearCWBoundaryTimers(cwStreams.local);
             void ensureAudioContext(true);
             startContinuousLocalTone();
-            setKeySurfaceActive(true, 'Sending from ' + humanizeCode(savedKeyConfig.straightKey) + '...');
+            setKeySurfaceActive(true, 'straight', 'Sending from ' + humanizeCode(savedKeyConfig.straightKey) + '...');
         }
         return;
     }
@@ -896,7 +1123,7 @@ function handleGlobalKeyDown(event) {
             iambicPressed.dit = true;
             iambicLastPressed = '.';
             void ensureAudioContext(true);
-            setKeySurfaceActive(true, 'Sending dits...');
+            setKeySurfaceActive(true, 'dit', 'Sending dits...');
             ensureIambicLoop();
             return;
         }
@@ -908,13 +1135,18 @@ function handleGlobalKeyDown(event) {
             iambicPressed.dah = true;
             iambicLastPressed = '-';
             void ensureAudioContext(true);
-            setKeySurfaceActive(true, 'Sending dahs...');
+            setKeySurfaceActive(true, 'dah', 'Sending dahs...');
             ensureIambicLoop();
         }
     }
 }
 
 async function handleGlobalKeyUp(event) {
+    if (shouldSuppressKeyingForEvent(event)) {
+        cancelActiveKeying();
+        return;
+    }
+
     if (savedKeyConfig.mode === 'straight' && event.code === savedKeyConfig.straightKey && straightKeyDownAt) {
         event.preventDefault();
         const startedAt = straightKeyDownAt;
@@ -934,6 +1166,27 @@ async function handleGlobalKeyUp(event) {
             iambicPressed.dah = false;
         }
     }
+}
+
+function handleDocumentFocusIn(event) {
+    if (isTextEntryTarget(event.target)) {
+        cancelActiveKeying();
+    }
+}
+
+function shouldSuppressKeyingForEvent(event) {
+    return isTextEntryTarget(event.target) || isTextEntryTarget(document.activeElement);
+}
+
+function cancelActiveKeying() {
+    straightKeyDownAt = 0;
+    iambicPressed.dit = false;
+    iambicPressed.dah = false;
+    iambicMemory.dit = false;
+    iambicMemory.dah = false;
+    stopIambicLoop();
+    stopContinuousLocalTone();
+    setKeySurfaceActive(false);
 }
 
 async function sendStraightDuration(duration, startedAt = performance.now() - duration) {
@@ -1015,8 +1268,10 @@ function isConnected() {
     return currentState === 'connected';
 }
 
-function setKeySurfaceActive(active, message = '') {
+function setKeySurfaceActive(active, tone = '', message = '') {
     btnKeySurface.classList.toggle('is-active', active);
+    keyLightDit.classList.toggle('is-active', active && (tone === 'dit' || tone === 'straight'));
+    keyLightDah.classList.toggle('is-active', active && (tone === 'dah' || tone === 'straight'));
     if (message) {
         keyingStatus.innerText = message;
     } else if (!pendingKeyBind) {
@@ -1370,11 +1625,11 @@ function updatePreview(value) {
 
 function renderKeyPreview() {
     const stream = cwStreams.local;
-    const raw = buildCurrentCWWordRaw(stream);
-    const decoded = stream.currentWordDecoded.trim();
+    const raw = buildCurrentCWCharacterRaw(stream);
+    const decoded = buildCurrentCWCharacterDecoded(stream);
 
     if (!raw && !decoded) {
-        updatePreview('No keying yet');
+        updatePreview('');
         return;
     }
 
@@ -1384,6 +1639,24 @@ function renderKeyPreview() {
     }
 
     updatePreview(raw || decoded);
+}
+
+function buildCurrentCWCharacterRaw(stream) {
+    if (stream.currentCharacter) {
+        return stream.currentCharacter;
+    }
+
+    const parts = String(stream.currentWordRaw || '').trim().split(/\s+/).filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : '';
+}
+
+function buildCurrentCWCharacterDecoded(stream) {
+    if (stream.currentCharacter) {
+        return '';
+    }
+
+    const decoded = String(stream.currentWordDecoded || '').trim();
+    return decoded ? decoded.slice(-1) : '';
 }
 
 function buildCurrentCWWordRaw(stream) {
@@ -1627,6 +1900,47 @@ async function sendBufferedCWWord(stream) {
     }
 }
 
+async function sendGlossaryEntry(section, entry) {
+    const packets = buildCWWordPacketsFromText(entry.text);
+    if (!packets.length) {
+        addSystemEntry('Could not send glossary entry ' + entry.text + ' because it contains unsupported characters.', 'warning');
+        return;
+    }
+
+    const mnemonic = getGlossaryMnemonic(section, entry);
+    addLogEntry({
+        sender: 'You',
+        text: entry.text,
+        detail: 'Glossary · ' + packets.map((packet) => packet.raw).join(' / ') + (mnemonic ? ' · ' + mnemonic : ''),
+        kind: 'local',
+    });
+
+    await ensureAudioContext(true);
+    localPlaybackQueue = localPlaybackQueue
+        .then(async () => {
+            for (const packet of packets) {
+                await playCWPacket(packet, savedAudioConfig.localFrequency, savedAudioConfig.localVolume, savedAudioConfig.localMuted);
+            }
+        })
+        .catch(async () => {
+            for (const packet of packets) {
+                await playCWPacket(packet, savedAudioConfig.localFrequency, savedAudioConfig.localVolume, savedAudioConfig.localMuted);
+            }
+        });
+
+    if (!isConnected()) {
+        return;
+    }
+
+    try {
+        for (const packet of packets) {
+            await SendMessage(encodeCWWordPacket(packet));
+        }
+    } catch (err) {
+        addSystemEntry('Failed to send glossary CW: ' + err, 'error');
+    }
+}
+
 function handleIncomingCWWordPacket(packet) {
     queueCWChatSegment(cwStreams.remote, 'remote', getRemotePeerName(), packet.raw, packet.decoded, Number(packet.unit) || getDitMs());
 
@@ -1666,7 +1980,11 @@ function flushCompletedCWWord(stream, kind, sender, eventTime) {
 }
 
 async function playBufferedCWWord(packet) {
-    if (savedAudioConfig.remoteMuted || !Array.isArray(packet.events)) {
+    await playCWPacket(packet, savedAudioConfig.remoteFrequency, savedAudioConfig.remoteVolume, savedAudioConfig.remoteMuted);
+}
+
+async function playCWPacket(packet, frequency, volumePercent, muted) {
+    if (muted || !Array.isArray(packet.events)) {
         return;
     }
 
@@ -1674,7 +1992,7 @@ async function playBufferedCWWord(packet) {
         if (!isCWSymbol(event.symbol)) {
             continue;
         }
-        await playTone(event.duration, savedAudioConfig.remoteFrequency, savedAudioConfig.remoteVolume, savedAudioConfig.remoteMuted);
+        await playTone(event.duration, frequency, volumePercent, muted);
         await waitMs((event.duration || 0) + (event.gapAfter || 0));
     }
 }
@@ -1827,6 +2145,190 @@ function blendEstimatedUnit(previousUnit, nextUnit) {
         return nextUnit;
     }
     return ((previousUnit * 3) + nextUnit) / 4;
+}
+
+function buildCWWordPacketsFromText(text) {
+    const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+    const unit = getDitMs();
+    const packets = [];
+
+    for (const word of words) {
+        const characters = Array.from(word);
+        const rawCharacters = [];
+        const events = [];
+
+        for (let charIndex = 0; charIndex < characters.length; charIndex += 1) {
+            const code = resolveMorseCode(characters[charIndex]);
+            if (!code) {
+                return [];
+            }
+            rawCharacters.push(code);
+
+            for (let symbolIndex = 0; symbolIndex < code.length; symbolIndex += 1) {
+                const symbol = code[symbolIndex];
+                const isLastSymbol = symbolIndex === code.length - 1;
+                const isLastCharacter = charIndex === characters.length - 1;
+                events.push({
+                    symbol,
+                    duration: symbol === '.' ? unit : unit * 3,
+                    gapAfter: isLastSymbol ? (isLastCharacter ? unit * 7 : unit * 3) : unit,
+                    invalid: false,
+                });
+            }
+        }
+
+        packets.push({
+            raw: rawCharacters.join(' '),
+            decoded: word.toUpperCase(),
+            unit,
+            events,
+        });
+    }
+
+    return packets;
+}
+
+function resolveMorseCode(character) {
+    const normalized = String(character || '').toUpperCase();
+    return morseByCharacter[normalized] || morseByCharacter[character] || '';
+}
+
+function buildMorseByCharacterMap() {
+    const output = {};
+    for (const [code, character] of Object.entries(morseAlphabet)) {
+        output[character] = code;
+    }
+    return output;
+}
+
+function createDefaultGlossarySections() {
+    return [
+        {
+            id: 'alphabet',
+            title: 'Alphabet',
+            description: 'A through Z with editable cue phrases stored only on this device.',
+            editable: true,
+            openByDefault: true,
+            entries: [
+                createGlossaryEntry('A', 'an A'),
+                createGlossaryEntry('B', 'BOB is the man'),
+                createGlossaryEntry('C', 'CO - ca   CO - la'),
+                createGlossaryEntry('D', 'DOG did it'),
+                createGlossaryEntry('E', 'eh'),
+                createGlossaryEntry('F', 'fetch a FIRE man'),
+                createGlossaryEntry('G', 'GOOD GRA - vy'),
+                createGlossaryEntry('H', 'hip - i - ty - hop'),
+                createGlossaryEntry('I', 'I  bid'),
+                createGlossaryEntry('J', 'in JAWS JAWS JAW'),
+                createGlossaryEntry('K', 'KANG - a - ROO'),
+                createGlossaryEntry('L', 'los - AN - ge - les'),
+                createGlossaryEntry('M', 'MMM MMM'),
+                createGlossaryEntry('N', 'NUD - ist'),
+                createGlossaryEntry('O', 'OH MY GOD'),
+                createGlossaryEntry('P', 'a POO - PY smell'),
+                createGlossaryEntry('Q', 'GOD SAVE the QUEEN'),
+                createGlossaryEntry('R', 'ro - TA - tion'),
+                createGlossaryEntry('S', 'si si si'),
+                createGlossaryEntry('T', 'TALL'),
+                createGlossaryEntry('U', 'u - ni - FORM'),
+                createGlossaryEntry('V', 'vic - to - ry   VEE'),
+                createGlossaryEntry('W', 'the WORLD WAR'),
+                createGlossaryEntry('X', 'X marks the SPOT'),
+                createGlossaryEntry('Y', 'YOURE a COOL DUDE'),
+                createGlossaryEntry('Z', 'ZINC ZOO keep - er'),
+            ],
+        },
+        {
+            id: 'numbers',
+            title: 'Numbers',
+            description: 'Digits 0 through 9 for callsigns, reports, and shorthand.',
+            editable: false,
+            openByDefault: true,
+            entries: [
+                createGlossaryEntry('0', 'five dahs'),
+                createGlossaryEntry('1', 'dit then four dahs'),
+                createGlossaryEntry('2', 'two dits then three dahs'),
+                createGlossaryEntry('3', 'three dits then two dahs'),
+                createGlossaryEntry('4', 'four dits then one dah'),
+                createGlossaryEntry('5', 'five dits'),
+                createGlossaryEntry('6', 'dah then four dits'),
+                createGlossaryEntry('7', 'two dahs then three dits'),
+                createGlossaryEntry('8', 'three dahs then two dits'),
+                createGlossaryEntry('9', 'four dahs then one dit'),
+            ],
+        },
+        {
+            id: 'punctuation',
+            title: 'Punctuation',
+            description: 'Common punctuation you may want during practice or short messages.',
+            editable: false,
+            openByDefault: false,
+            entries: [
+                createGlossaryEntry('.', 'Period'),
+                createGlossaryEntry(',', 'Comma'),
+                createGlossaryEntry('?', 'Question mark'),
+                createGlossaryEntry('/', 'Slash'),
+                createGlossaryEntry('=', 'BT or separator'),
+                createGlossaryEntry('+', 'AR or end of message'),
+            ],
+        },
+        {
+            id: 'abbreviations',
+            title: 'Ham Abbreviations',
+            description: 'Common on-air shorthand for quick exchanges.',
+            editable: false,
+            openByDefault: false,
+            entries: [
+                createGlossaryEntry('CQ', 'Calling any station'),
+                createGlossaryEntry('DE', 'This is'),
+                createGlossaryEntry('BK', 'Back to you'),
+                createGlossaryEntry('KN', 'Over to named station only'),
+                createGlossaryEntry('R', 'Received'),
+                createGlossaryEntry('TU', 'Thank you'),
+                createGlossaryEntry('73', 'Best regards'),
+                createGlossaryEntry('88', 'Love and kisses'),
+                createGlossaryEntry('OM', 'Old man'),
+                createGlossaryEntry('YL', 'Young lady'),
+            ],
+        },
+        {
+            id: 'qcodes',
+            title: 'Q-Codes',
+            description: 'A starter set of common Q-signals for casual operating.',
+            editable: false,
+            openByDefault: false,
+            entries: [
+                createGlossaryEntry('QRL', 'Are you busy?'),
+                createGlossaryEntry('QRM', 'Interference'),
+                createGlossaryEntry('QRN', 'Static or noise'),
+                createGlossaryEntry('QRP', 'Low power'),
+                createGlossaryEntry('QRO', 'Increase power'),
+                createGlossaryEntry('QRT', 'Stop sending'),
+                createGlossaryEntry('QRZ', 'Who is calling me?'),
+                createGlossaryEntry('QSB', 'Fading'),
+                createGlossaryEntry('QSL', 'Acknowledged'),
+                createGlossaryEntry('QSO', 'Contact'),
+                createGlossaryEntry('QSY', 'Change frequency'),
+                createGlossaryEntry('QTH', 'Location'),
+            ],
+        },
+    ];
+}
+
+function createGlossaryEntry(text, mnemonic = '', note = '') {
+    return {
+        text,
+        code: encodeGlossaryText(text),
+        mnemonic,
+        note,
+    };
+}
+
+function encodeGlossaryText(text) {
+    return Array.from(String(text || ''))
+        .map((character) => resolveMorseCode(character))
+        .filter(Boolean)
+        .join(' ');
 }
 
 function encodeCWSymbol(symbol, duration) {
