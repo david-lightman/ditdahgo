@@ -1,0 +1,18 @@
+# Local machine config
+.env
+.env.local
+.env.*.local
+.direnv/
+
+# macOS
+.DS_Store
+
+# Frontend
+app/frontend/node_modules/
+app/frontend/dist/
+
+# Wails / build outputs
+app/build/bin/
+
+# Local screenshots and scratch assets
+Screenshot *.png

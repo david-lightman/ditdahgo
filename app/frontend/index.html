@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Dit Dah Go</title>
+</head>
+<body>
+<div id="app" class="app-shell state-disconnected">
+    <div id="settings-overlay" class="settings-overlay hidden"></div>
+    <aside id="settings-drawer" class="settings-drawer panel-shell hidden" aria-label="Settings panel">
+        <div class="settings-drawer-header">
+            <div>
+                <p class="section-kicker">Settings</p>
+                <h2>Session and preferences</h2>
+            </div>
+            <button id="btn-close-settings" class="ghost-button" type="button">Close</button>
+        </div>
+
+        <div id="connection-panel" class="keying-config-card" aria-label="Connection setup">
+            <div class="keying-config-header">
+                <div>
+                    <p class="section-kicker">Session</p>
+                    <h3>Connection</h3>
+                </div>
+                <span id="connection-summary-badge" class="status-badge status-idle">Not connected</span>
+            </div>
+
+            <div class="field-stack">
+                <label for="input-signal-url">Signaling server</label>
+                <input type="text" id="input-signal-url" placeholder="http://localhost:8080" autocomplete="off">
+            </div>
+
+            <div class="connection-actions">
+                <button id="btn-host" class="primary-button" type="button">Host</button>
+                <div class="join-group">
+                    <label class="sr-only" for="input-join-id">Session ID</label>
+                    <input type="text" id="input-join-id" placeholder="Session ID" autocomplete="off">
+                    <button id="btn-join" class="secondary-button" type="button">Join</button>
+                </div>
+            </div>
+
+            <div class="status-grid">
+                <div>
+                    <p class="status-label">Status</p>
+                    <p id="connection-status" class="status-copy">Not connected</p>
+                </div>
+                <div id="session-info" class="session-card hidden">
+                    <p class="status-label">Session ID</p>
+                    <div class="session-id-row">
+                        <strong id="display-session-id">-</strong>
+                        <button id="btn-copy-session" class="ghost-button small-button" type="button">Copy</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="keying-config-card">
+            <div class="keying-config-header">
+                <div>
+                    <p class="section-kicker">Keying</p>
+                    <h3>CW controls</h3>
+                </div>
+                <p id="keying-status" class="field-help">Default straight key is Right Shift.</p>
+            </div>
+
+            <div class="keying-config-grid">
+                <div class="config-field">
+                    <label for="select-keying-mode">Mode</label>
+                    <select id="select-keying-mode">
+                        <option value="straight">Straight key</option>
+                        <option value="iambic">Iambic</option>
+                    </select>
+                </div>
+
+                <div class="config-field">
+                    <label class="metric-label-row" for="input-wpm">
+                        <span>Target WPM</span>
+                        <span id="display-wpm" class="metric-value">18 WPM</span>
+                    </label>
+                    <div class="range-row">
+                        <input id="input-wpm" type="range" min="5" max="35" step="1" value="18">
+                    </div>
+                </div>
+
+                <div class="config-field config-bindings">
+                    <label>Straight key</label>
+                    <div class="binding-row">
+                        <button id="btn-bind-straight" class="secondary-button" type="button">Bind key</button>
+                        <span id="display-straight-key" class="binding-value">Right Shift</span>
+                    </div>
+                </div>
+
+                <div id="iambic-bindings" class="config-field config-bindings hidden">
+                    <label>Iambic keys</label>
+                    <div class="binding-stack">
+                        <div class="binding-row">
+                            <button id="btn-bind-dit" class="secondary-button" type="button">Bind dit</button>
+                            <span id="display-dit-key" class="binding-value">F</span>
+                        </div>
+                        <div class="binding-row">
+                            <button id="btn-bind-dah" class="secondary-button" type="button">Bind dah</button>
+                            <span id="display-dah-key" class="binding-value">J</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="audio-config-card">
+            <div class="keying-config-header">
+                <div>
+                    <p class="section-kicker">Audio</p>
+                    <h3>Sidetone and incoming CW</h3>
+                </div>
+                <p id="audio-status" class="field-help">Audio will unlock after your first interaction.</p>
+            </div>
+
+            <div class="audio-config-grid">
+                <div class="audio-pane">
+                    <div class="audio-pane-header">
+                        <div>
+                            <p class="status-label">Local sidetone</p>
+                            <p class="field-help">What you hear while you key.</p>
+                        </div>
+                        <button id="btn-toggle-local-audio" class="secondary-button" type="button">On</button>
+                    </div>
+
+                    <div class="config-field">
+                        <label class="metric-label-row" for="input-local-frequency">
+                            <span>Frequency</span>
+                            <span id="display-local-frequency" class="metric-value">650 Hz</span>
+                        </label>
+                        <div class="range-row">
+                            <input id="input-local-frequency" type="range" min="300" max="1100" step="10" value="650">
+                        </div>
+                    </div>
+
+                    <div class="config-field">
+                        <label class="metric-label-row" for="input-local-volume">
+                            <span>Volume</span>
+                            <span id="display-local-volume" class="metric-value">18%</span>
+                        </label>
+                        <div class="range-row">
+                            <input id="input-local-volume" type="range" min="0" max="100" step="1" value="18">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="audio-pane">
+                    <div class="audio-pane-header">
+                        <div>
+                            <p class="status-label">Incoming CW</p>
+                            <p class="field-help">What you hear from the other side.</p>
+                        </div>
+                        <button id="btn-toggle-remote-audio" class="secondary-button" type="button">On</button>
+                    </div>
+
+                    <div class="config-field">
+                        <label class="metric-label-row" for="input-remote-frequency">
+                            <span>Frequency</span>
+                            <span id="display-remote-frequency" class="metric-value">650 Hz</span>
+                        </label>
+                        <div class="range-row">
+                            <input id="input-remote-frequency" type="range" min="300" max="1100" step="10" value="650">
+                        </div>
+                    </div>
+
+                    <div class="config-field">
+                        <label class="metric-label-row" for="input-remote-volume">
+                            <span>Volume</span>
+                            <span id="display-remote-volume" class="metric-value">18%</span>
+                        </label>
+                        <div class="range-row">
+                            <input id="input-remote-volume" type="range" min="0" max="100" step="1" value="18">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="keying-config-card">
+            <div class="keying-config-header">
+                <div>
+                    <p class="section-kicker">Conversation</p>
+                    <h3>CW stream</h3>
+                </div>
+                <p id="display-status" class="field-help">Chat display options for CW.</p>
+            </div>
+
+            <div class="config-field config-bindings">
+                <label>Decode CW stream</label>
+                <div class="binding-row">
+                    <button id="btn-toggle-decode-cw" class="secondary-button" type="button">On</button>
+                </div>
+            </div>
+
+            <div class="config-field config-bindings">
+                <label>Stream local CW to chat</label>
+                <div class="binding-row">
+                    <button id="btn-toggle-stream-local-cw" class="secondary-button" type="button">Off</button>
+                    <span class="binding-value">Local only</span>
+                </div>
+            </div>
+
+            <div class="config-field config-bindings">
+                <label>Stream remote CW to chat</label>
+                <div class="binding-row">
+                    <button id="btn-toggle-stream-remote-cw" class="secondary-button" type="button">Off</button>
+                    <span class="binding-value">Remote only</span>
+                </div>
+            </div>
+
+            <div class="config-field">
+                <label class="metric-label-row" for="input-chat-font-size">
+                    <span>Chat font size</span>
+                    <span id="display-chat-font-size" class="metric-value">15 px</span>
+                </label>
+                <div class="range-row">
+                    <input id="input-chat-font-size" type="range" min="13" max="19" step="1" value="15">
+                </div>
+            </div>
+        </div>
+
+        <div class="keying-config-card">
+            <div class="keying-config-header">
+                <div>
+                    <p class="section-kicker">Shortcuts</p>
+                    <h3>Keyboard</h3>
+                </div>
+                <p id="shortcut-status" class="field-help">Use Cmd on macOS and Ctrl on Windows/Linux.</p>
+            </div>
+            <div class="shortcut-list">
+                <button id="btn-bind-shortcut-focus-keyer" class="shortcut-row" type="button">
+                    <span class="shortcut-row-label">Focus keyer</span>
+                    <span id="display-shortcut-focus-keyer" class="shortcut-row-value">Cmd/Ctrl+K</span>
+                </button>
+
+                <button id="btn-bind-shortcut-focus-chat" class="shortcut-row" type="button">
+                    <span class="shortcut-row-label">Focus chat</span>
+                    <span id="display-shortcut-focus-chat" class="shortcut-row-value">Cmd/Ctrl+Shift+C</span>
+                </button>
+
+                <button id="btn-bind-shortcut-toggle-mode" class="shortcut-row" type="button">
+                    <span class="shortcut-row-label">Toggle keyer mode</span>
+                    <span id="display-shortcut-toggle-mode" class="shortcut-row-value">Cmd/Ctrl+Shift+M</span>
+                </button>
+
+                <button id="btn-bind-shortcut-settings" class="shortcut-row" type="button">
+                    <span class="shortcut-row-label">Open settings</span>
+                    <span id="display-shortcut-settings" class="shortcut-row-value">Cmd/Ctrl+,</span>
+                </button>
+
+                <button id="btn-bind-shortcut-quit" class="shortcut-row" type="button">
+                    <span class="shortcut-row-label">Quit app</span>
+                    <span id="display-shortcut-quit" class="shortcut-row-value">Ctrl+Q</span>
+                </button>
+
+                <div class="binding-row shortcut-actions-row">
+                    <button id="btn-reset-shortcuts" class="ghost-button small-button" type="button">Reset defaults</button>
+                    <span class="field-help">Arrow keys still adjust WPM and frequency when allowed.</span>
+                </div>
+                <p class="field-help">Shortcut bindings always use the primary modifier. Reserved combos like copy, macOS minimize, and macOS quit stay blocked.</p>
+            </div>
+        </div>
+
+        <section class="activity-panel panel-shell settings-log-panel" aria-label="Activity log">
+            <button id="btn-toggle-activity-log" class="activity-toggle" type="button" aria-expanded="false">
+                <span>
+                    <span class="section-kicker">Diagnostics</span>
+                    <strong>System log</strong>
+                </span>
+                <span id="activity-log-meta" class="activity-meta">0 entries</span>
+            </button>
+            <div id="activity-log-wrapper" class="activity-log-wrapper hidden">
+                <div id="activity-log" class="activity-log-feed"></div>
+            </div>
+        </section>
+    </aside>
+
+    <main class="chat-layout">
+        <section class="chat-shell panel-shell" aria-label="Chat">
+            <div class="chat-header">
+                <div>
+                    <h2>Chat</h2>
+                </div>
+                <p id="chat-status-line" class="panel-note">Offline</p>
+            </div>
+
+            <div id="chat-empty-state" class="timeline-empty-state chat-empty-state">
+                <p class="empty-title">Nothing in the thread yet.</p>
+                <p class="empty-copy">Messages you type will appear here.</p>
+            </div>
+
+            <div id="chat-log" class="chat-feed" aria-live="polite"></div>
+
+            <section class="input-panel chat-composer-shell" aria-label="Input dock">
+                <div class="chat-composer-toolbar">
+                    <div class="send-meta">
+                        <span id="keying-mode-badge" class="mode-badge mode-badge-active">Straight key</span>
+                        <span id="wpm-pill" class="wpm-pill">18 WPM</span>
+                        <span id="keying-summary" class="mode-badge mode-badge-live">Right Shift</span>
+                    </div>
+                    <div class="composer-toolbar-actions">
+                        <span id="topbar-connection-badge" class="status-badge status-idle">Disconnected</span>
+                        <span id="session-chip" class="mode-badge mode-badge-live hidden">Session <span id="session-chip-value">-</span></span>
+                        <button id="btn-open-keying-settings" class="ghost-button small-button" type="button">Settings</button>
+                    </div>
+                </div>
+
+                <div class="chat-compose-grid">
+                    <div class="composer-card composer-card-primary">
+                        <div class="composer-row composer-row-primary">
+                            <input type="text" id="input-chat" placeholder="Message" autocomplete="off">
+                            <button id="btn-send" class="primary-button" type="button">Send</button>
+                        </div>
+                        <p id="composer-hint" class="field-help">Offline</p>
+                    </div>
+
+                    <div class="key-surface-card key-surface-card-compact">
+                        <div class="key-surface-header">
+                            <span id="key-surface-title" class="key-surface-title">Straight key</span>
+                            <span class="status-label">CW</span>
+                        </div>
+                        <button id="btn-key-surface" class="key-surface key-surface-compact" type="button">
+                            <span id="key-surface-copy" class="key-surface-copy">Hold your bound key to send.</span>
+                        </button>
+                        <div class="key-preview-row key-preview-row-compact">
+                            <div id="key-preview" class="key-preview">No keying yet</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </section>
+    </main>
+</div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
