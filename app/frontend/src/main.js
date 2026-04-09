@@ -25,6 +25,7 @@ const btnToggleLocalAudio = document.getElementById('btn-toggle-local-audio');
 const btnToggleRemoteAudio = document.getElementById('btn-toggle-remote-audio');
 const inputJoinId = document.getElementById('input-join-id');
 const inputSignalUrl = document.getElementById('input-signal-url');
+const inputDisplayName = document.getElementById('input-display-name');
 const inputWpm = document.getElementById('input-wpm');
 const inputLocalFrequency = document.getElementById('input-local-frequency');
 const inputLocalVolume = document.getElementById('input-local-volume');
@@ -82,6 +83,7 @@ const btnSend = document.getElementById('btn-send');
 const isMacOS = navigator.platform.toLowerCase().includes('mac');
 
 const defaultSignalUrl = 'http://localhost:8080';
+const peerMetadataPrefix = '__peer_meta__:';
 const defaultKeyConfig = {
     mode: 'straight',
     straightKey: 'ShiftRight',
@@ -152,10 +154,12 @@ const morseAlphabet = {
     '----.': '9',
 };
 const savedSignalUrl = window.localStorage.getItem('signalServerURL');
+const savedDisplayName = window.localStorage.getItem('displayName') || '';
 const savedKeyConfig = readKeyConfig();
 const savedAudioConfig = readAudioConfig();
 const savedDisplayConfig = readDisplayConfig();
 inputSignalUrl.value = savedSignalUrl || defaultSignalUrl;
+inputDisplayName.value = savedDisplayName;
 selectKeyingMode.value = savedKeyConfig.mode;
 inputWpm.value = String(savedKeyConfig.wpm);
 inputLocalFrequency.value = String(savedAudioConfig.localFrequency);
@@ -171,6 +175,7 @@ let pendingShortcutBind = '';
 let straightKeyDownAt = 0;
 let lastPreview = '';
 let shortcutNotice = '';
+let remotePeerName = 'Buddy';
 let iambicLoopTimer = 0;
 let iambicPressed = { dit: false, dah: false };
 let iambicMemory = { dit: false, dah: false };
@@ -308,6 +313,19 @@ inputChatFontSize.addEventListener('input', () => {
     renderDisplayConfig();
 });
 
+inputDisplayName.addEventListener('change', async () => {
+    persistDisplayName();
+    if (!isConnected()) {
+        return;
+    }
+
+    try {
+        await sendPeerMetadata();
+    } catch (err) {
+        addSystemEntry('Failed to update your peer name: ' + err, 'warning');
+    }
+});
+
 btnBindStraight.addEventListener('click', () => beginKeyBinding('straightKey'));
 btnBindDit.addEventListener('click', () => beginKeyBinding('ditKey'));
 btnBindDah.addEventListener('click', () => beginKeyBinding('dahKey'));
@@ -422,9 +440,18 @@ EventsOn("onConnected", () => {
     setComposerEnabled(true);
     chatStatusLine.innerText = 'Connected';
     addSystemEntry('Connected to peer.', 'success');
+    void sendPeerMetadata();
 });
 
 EventsOn("onMessage", (msg) => {
+    const peerMetadata = parsePeerMetadata(msg);
+    if (peerMetadata) {
+        const nextPeerName = peerMetadata.name || 'Buddy';
+        remotePeerName = nextPeerName;
+        addSystemEntry('Peer identified as ' + nextPeerName + '.');
+        return;
+    }
+
     const cwWordPacket = parseCWWordPacket(msg);
     if (cwWordPacket) {
         handleIncomingCWWordPacket(cwWordPacket);
@@ -433,13 +460,13 @@ EventsOn("onMessage", (msg) => {
 
     const cwPayload = parseCWSymbol(msg);
     if (cwPayload) {
-        appendCWSymbol('Buddy', cwPayload.symbol, 'remote', cwPayload.duration, performance.now());
+        appendCWSymbol(getRemotePeerName(), cwPayload.symbol, 'remote', cwPayload.duration, performance.now());
         void playRemoteSymbol(cwPayload.symbol, cwPayload.duration);
         return;
     }
 
     addLogEntry({
-        sender: 'Buddy',
+        sender: getRemotePeerName(),
         text: msg,
         kind: 'remote',
     });
@@ -449,6 +476,7 @@ EventsOn("onConnectionError", (msg) => {
     straightKeyDownAt = 0;
     stopIambicLoop();
     stopContinuousLocalTone();
+    remotePeerName = 'Buddy';
     setConnectionState('error', msg);
     setConnectionControlsDisabled(false);
     setComposerEnabled(true);
@@ -461,6 +489,46 @@ function getSignalUrl() {
     inputSignalUrl.value = signalURL;
     window.localStorage.setItem('signalServerURL', signalURL);
     return signalURL;
+}
+
+function persistDisplayName() {
+    window.localStorage.setItem('displayName', inputDisplayName.value.trim());
+}
+
+function getLocalPeerName() {
+    return inputDisplayName.value.trim();
+}
+
+function getRemotePeerName() {
+    return remotePeerName || 'Buddy';
+}
+
+async function sendPeerMetadata() {
+    const name = getLocalPeerName();
+    if (!name) {
+        return;
+    }
+    await SendMessage(encodePeerMetadata({ name }));
+}
+
+function encodePeerMetadata(metadata) {
+    return peerMetadataPrefix + JSON.stringify(metadata);
+}
+
+function parsePeerMetadata(value) {
+    if (!value.startsWith(peerMetadataPrefix)) {
+        return null;
+    }
+
+    try {
+        const metadata = JSON.parse(value.slice(peerMetadataPrefix.length));
+        if (!metadata || typeof metadata.name !== 'string') {
+            return null;
+        }
+        return { name: metadata.name.trim().slice(0, 32) };
+    } catch {
+        return null;
+    }
 }
 
 function setConnectionState(state, message) {
@@ -1551,7 +1619,7 @@ async function sendBufferedCWWord(stream) {
 }
 
 function handleIncomingCWWordPacket(packet) {
-    queueCWChatSegment(cwStreams.remote, 'remote', 'Buddy', packet.raw, packet.decoded, Number(packet.unit) || getDitMs());
+    queueCWChatSegment(cwStreams.remote, 'remote', getRemotePeerName(), packet.raw, packet.decoded, Number(packet.unit) || getDitMs());
 
     remotePlaybackQueue = remotePlaybackQueue
         .then(() => playBufferedCWWord(packet))

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -14,6 +15,7 @@ import (
 )
 
 const defaultSignalServerURL = "http://localhost:8080"
+const peerMetadataPrefix = "__peer_meta__:"
 
 func main() {
 	hostFlag := flag.Bool("host", false, "Start a new session as the host")
@@ -61,10 +63,18 @@ func main() {
 	fmt.Println("\n>>> Connection established! Type a message and press Enter to send.")
 
 	// --- Simple Chat Logic ---
+	peerName := "Buddy"
 	// Start a goroutine to read incoming messages
 	go func() {
 		for msg := range conn.Messages() {
-			fmt.Printf("\nBuddy says: %s\n> ", msg)
+			if metadata := parsePeerMetadata(msg); metadata != nil {
+				if metadata.Name != "" {
+					peerName = metadata.Name
+					fmt.Printf("\nPeer identified as %s\n> ", peerName)
+				}
+				continue
+			}
+			fmt.Printf("\n%s says: %s\n> ", peerName, msg)
 		}
 		fmt.Println("Connection closed by peer.")
 		os.Exit(0)
@@ -101,4 +111,24 @@ func resolveSignalServerURL(signalURL string) string {
 		return defaultSignalServerURL
 	}
 	return strings.TrimRight(signalURL, "/")
+}
+
+type peerMetadata struct {
+	Name string `json:"name"`
+}
+
+func parsePeerMetadata(value string) *peerMetadata {
+	if !strings.HasPrefix(value, peerMetadataPrefix) {
+		return nil
+	}
+
+	var metadata peerMetadata
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(value, peerMetadataPrefix)), &metadata); err != nil {
+		return nil
+	}
+	metadata.Name = strings.TrimSpace(metadata.Name)
+	if metadata.Name == "" {
+		return nil
+	}
+	return &metadata
 }

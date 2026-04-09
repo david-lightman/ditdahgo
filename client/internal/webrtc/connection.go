@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/pion/webrtc/v4"
 )
@@ -19,14 +20,19 @@ type Connection struct {
 	sigClient   *signal.Client
 
 	// Public channels for the main application to interact with.
-	connected chan struct{}
-	messages  chan string
-	errors    chan error
-	done      chan struct{}
-	cancel    context.CancelFunc
-	closeOnce sync.Once
-	openOnce  sync.Once
+	connected       chan struct{}
+	messages        chan string
+	errors          chan error
+	done            chan struct{}
+	cancel          context.CancelFunc
+	closeOnce       sync.Once
+	openOnce        sync.Once
+	errorOnce       sync.Once
+	stateMu         sync.Mutex
+	disconnectTimer *time.Timer
 }
+
+const disconnectTimeout = 8 * time.Second
 
 // NewConnection creates and configures a new WebRTC connection manager.
 func NewConnection(signalServerURL string) (*Connection, error) {
@@ -59,9 +65,7 @@ func NewConnection(signalServerURL string) (*Connection, error) {
 	// Set a handler for when the connection state changes.
 	pc.OnConnectionStateChange(func(s webrtc.PeerConnectionState) {
 		log.Printf("Peer Connection State has changed: %s\n", s.String())
-		if s == webrtc.PeerConnectionStateFailed {
-			conn.reportError(fmt.Errorf("peer connection failed"))
-		}
+		conn.handleConnectionStateChange(s)
 	})
 
 	return conn, nil
@@ -198,10 +202,15 @@ func (c *Connection) JoinSession(sessionID string) error {
 func (c *Connection) setDataChannelHandlers() {
 	c.dataChannel.OnOpen(func() {
 		log.Printf("Data channel '%s' opened.\n", c.dataChannel.Label())
+		c.cancelDisconnectTimer()
 		// Signal that the connection is now fully established.
 		c.openOnce.Do(func() {
 			close(c.connected)
 		})
+	})
+
+	c.dataChannel.OnClose(func() {
+		c.reportAndClose(fmt.Errorf("peer disconnected"))
 	})
 
 	c.dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
@@ -243,6 +252,7 @@ func (c *Connection) SendMessage(text string) error {
 // Close gracefully closes the peer connection.
 func (c *Connection) Close() {
 	c.closeOnce.Do(func() {
+		c.cancelDisconnectTimer()
 		if c.cancel != nil {
 			c.cancel()
 		}
@@ -251,6 +261,42 @@ func (c *Connection) Close() {
 			c.peerConn.Close()
 		}
 	})
+}
+
+func (c *Connection) handleConnectionStateChange(state webrtc.PeerConnectionState) {
+	switch state {
+	case webrtc.PeerConnectionStateConnected:
+		c.cancelDisconnectTimer()
+	case webrtc.PeerConnectionStateDisconnected:
+		c.startDisconnectTimer()
+	case webrtc.PeerConnectionStateFailed:
+		c.reportAndClose(fmt.Errorf("peer connection failed"))
+	case webrtc.PeerConnectionStateClosed:
+		c.reportAndClose(fmt.Errorf("peer connection closed"))
+	}
+}
+
+func (c *Connection) startDisconnectTimer() {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
+
+	if c.disconnectTimer != nil {
+		c.disconnectTimer.Stop()
+	}
+
+	c.disconnectTimer = time.AfterFunc(disconnectTimeout, func() {
+		c.reportAndClose(fmt.Errorf("peer disconnected"))
+	})
+}
+
+func (c *Connection) cancelDisconnectTimer() {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
+
+	if c.disconnectTimer != nil {
+		c.disconnectTimer.Stop()
+		c.disconnectTimer = nil
+	}
 }
 
 func (c *Connection) reportError(err error) {
@@ -265,6 +311,13 @@ func (c *Connection) reportError(err error) {
 	default:
 		log.Printf("Connection error dropped because no listener was ready: %v", err)
 	}
+}
+
+func (c *Connection) reportAndClose(err error) {
+	c.errorOnce.Do(func() {
+		c.reportError(err)
+		c.Close()
+	})
 }
 
 func (c *Connection) doneContext() context.Context {
