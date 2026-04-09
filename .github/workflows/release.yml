@@ -15,7 +15,7 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            artifact_name: dit-dah-go-macos-universal.tar.gz
+            artifact_name: dit-dah-go-macos-arm64.tar.gz
             shell: bash
           - os: ubuntu-latest
             artifact_name: dit-dah-go-linux-amd64.tar.gz
@@ -61,14 +61,26 @@ jobs:
         run: |
           "$(go env GOPATH)/bin/wails" build -clean
           mkdir -p ../release-assets
-          tar -C build/bin -czf ../release-assets/${{ matrix.artifact_name }} dit-dah-go.app
+          app_bundle=$(find build/bin -maxdepth 1 -type d -name '*.app' -print -quit)
+          if [[ -z "$app_bundle" ]]; then
+            echo "No .app bundle found in build/bin"
+            ls -la build/bin
+            exit 1
+          fi
+          tar -C build/bin -czf ../release-assets/${{ matrix.artifact_name }} "$(basename "$app_bundle")"
 
       - name: Build Linux app
         if: runner.os == 'Linux'
         run: |
           "$(go env GOPATH)/bin/wails" build -clean -tags webkit2_41
           mkdir -p ../release-assets
-          tar -C build/bin -czf ../release-assets/${{ matrix.artifact_name }} dit-dah-go
+          linux_binary=$(find build/bin -maxdepth 1 -type f -name 'dit-dah-go*' -print -quit)
+          if [[ -z "$linux_binary" ]]; then
+            echo "No Linux binary found in build/bin"
+            ls -la build/bin
+            exit 1
+          fi
+          tar -C build/bin -czf ../release-assets/${{ matrix.artifact_name }} "$(basename "$linux_binary")"
 
       - name: Build Windows app
         if: runner.os == 'Windows'
@@ -76,7 +88,13 @@ jobs:
           $wails = Join-Path (go env GOPATH) 'bin/wails.exe'
           & $wails build -clean
           New-Item -ItemType Directory -Force -Path ../release-assets | Out-Null
-          Compress-Archive -Path build/bin/dit-dah-go.exe -DestinationPath ../release-assets/${{ matrix.artifact_name }} -Force
+          $binary = Get-ChildItem -Path build/bin -Filter '*.exe' | Select-Object -First 1
+          if ($null -eq $binary) {
+            Write-Host 'No Windows executable found in build/bin'
+            Get-ChildItem build/bin
+            exit 1
+          }
+          Compress-Archive -Path $binary.FullName -DestinationPath ../release-assets/${{ matrix.artifact_name }} -Force
 
       - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
