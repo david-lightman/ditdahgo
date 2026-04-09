@@ -32,6 +32,7 @@ const inputLocalVolume = document.getElementById('input-local-volume');
 const inputRemoteFrequency = document.getElementById('input-remote-frequency');
 const inputRemoteVolume = document.getElementById('input-remote-volume');
 const inputChatFontSize = document.getElementById('input-chat-font-size');
+const inputCWChatPauseMs = document.getElementById('input-cw-chat-pause-ms');
 const selectKeyingMode = document.getElementById('select-keying-mode');
 const statusSpan = document.getElementById('connection-status');
 const sessionInfoDiv = document.getElementById('session-info');
@@ -61,6 +62,7 @@ const displayLocalVolume = document.getElementById('display-local-volume');
 const displayRemoteFrequency = document.getElementById('display-remote-frequency');
 const displayRemoteVolume = document.getElementById('display-remote-volume');
 const displayChatFontSize = document.getElementById('display-chat-font-size');
+const displayCWChatPauseMs = document.getElementById('display-cw-chat-pause-ms');
 const wpmPill = document.getElementById('wpm-pill');
 const iambicBindings = document.getElementById('iambic-bindings');
 const keyPreview = document.getElementById('key-preview');
@@ -111,9 +113,9 @@ const defaultDisplayConfig = {
     streamLocalCWToChat: false,
     streamRemoteCWToChat: false,
     chatFontSize: 15,
+    cwChatPauseMs: 3000,
 };
 const cwUnknownToken = '<?>';
-const cwPhrasePauseUnits = 35;
 const iambicModeBehavior = 'A';
 const morseAlphabet = {
     '.-': 'A',
@@ -167,6 +169,7 @@ inputLocalVolume.value = String(savedAudioConfig.localVolume);
 inputRemoteFrequency.value = String(savedAudioConfig.remoteFrequency);
 inputRemoteVolume.value = String(savedAudioConfig.remoteVolume);
 inputChatFontSize.value = String(savedDisplayConfig.chatFontSize);
+inputCWChatPauseMs.value = String(savedDisplayConfig.cwChatPauseMs);
 
 let currentState = 'disconnected';
 let currentSessionId = '';
@@ -309,6 +312,12 @@ btnToggleStreamRemoteCW.addEventListener('click', () => {
 
 inputChatFontSize.addEventListener('input', () => {
     savedDisplayConfig.chatFontSize = Number(inputChatFontSize.value);
+    persistDisplayConfig();
+    renderDisplayConfig();
+});
+
+inputCWChatPauseMs.addEventListener('input', () => {
+    savedDisplayConfig.cwChatPauseMs = Number(inputCWChatPauseMs.value);
     persistDisplayConfig();
     renderDisplayConfig();
 });
@@ -818,6 +827,7 @@ function renderDisplayConfig() {
     btnToggleStreamLocalCW.innerText = savedDisplayConfig.streamLocalCWToChat ? 'On' : 'Off';
     btnToggleStreamRemoteCW.innerText = savedDisplayConfig.streamRemoteCWToChat ? 'On' : 'Off';
     displayChatFontSize.innerText = savedDisplayConfig.chatFontSize + ' px';
+    displayCWChatPauseMs.innerText = formatCWChatPause(savedDisplayConfig.cwChatPauseMs);
     displayStatus.innerText = displaySummary();
     document.documentElement.style.setProperty('--chat-font-size', savedDisplayConfig.chatFontSize + 'px');
 }
@@ -1574,10 +1584,9 @@ function scheduleCWChatFlush(stream) {
         window.clearTimeout(stream.phraseTimer);
     }
 
-    const unit = Math.max(1, stream.pendingChatUnit || getDitMs());
     stream.phraseTimer = window.setTimeout(() => {
         flushCWChatSegment(stream);
-    }, unit * cwPhrasePauseUnits);
+    }, savedDisplayConfig.cwChatPauseMs);
 }
 
 function flushCWChatSegment(stream) {
@@ -1871,7 +1880,11 @@ function parseCWWordPacket(value) {
 }
 
 function displaySummary() {
-    return 'Chat display options for CW.';
+    return 'CW chat lines flush after ' + formatCWChatPause(savedDisplayConfig.cwChatPauseMs) + ' of silence.';
+}
+
+function formatCWChatPause(durationMs) {
+    return (durationMs / 1000).toFixed(1) + ' s';
 }
 
 function resolveCWUnit(stream, kind) {
