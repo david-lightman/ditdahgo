@@ -11,7 +11,7 @@ Local WebRTC chat/practice project with three parts:
 Start the signaling server in Podman:
 
 ```bash
-cd /Users/a220018178/Documents/personal/dit-dah-go/signaling-server
+cd signaling-server
 podman machine start
 podman build -t ditdahgo-signaling -f Containerfile .
 podman run -d --name ditdahgo-signaling -p 8080:8080 ditdahgo-signaling
@@ -21,21 +21,21 @@ podman ps -a
 Run the CLI client as host:
 
 ```bash
-cd /Users/a220018178/Documents/personal/dit-dah-go/client
+cd client
 go run ./cmd/ditdahgo -host -signal http://localhost:8080
 ```
 
 Run the CLI client as joiner:
 
 ```bash
-cd /Users/a220018178/Documents/personal/dit-dah-go/client
+cd client
 go run ./cmd/ditdahgo -join SESSION_ID -signal http://localhost:8080
 ```
 
 Run the desktop app in development:
 
 ```bash
-cd /Users/a220018178/Documents/personal/dit-dah-go/app
+cd app
 wails dev
 ```
 
@@ -74,7 +74,7 @@ Purpose: exchange SDP messages between peers.
 Run locally without Podman:
 
 ```bash
-cd /Users/a220018178/Documents/personal/dit-dah-go/signaling-server
+cd signaling-server
 go run ./cmd/signaling
 ```
 
@@ -92,7 +92,7 @@ Purpose: terminal-based peer client.
 Examples:
 
 ```bash
-cd /Users/a220018178/Documents/personal/dit-dah-go/client
+cd client
 go run ./cmd/ditdahgo -host -signal http://localhost:8080
 go run ./cmd/ditdahgo -join SESSION_ID -signal http://localhost:8080
 ```
@@ -112,14 +112,14 @@ Purpose: Wails desktop client.
 Development run:
 
 ```bash
-cd /Users/a220018178/Documents/personal/dit-dah-go/app
+cd app
 wails dev
 ```
 
 Build a desktop app:
 
 ```bash
-cd /Users/a220018178/Documents/personal/dit-dah-go/app
+cd app
 wails build
 ```
 
@@ -130,7 +130,7 @@ The app stores the signaling server URL in local UI storage on your machine. Tha
 Build the image:
 
 ```bash
-cd /Users/a220018178/Documents/personal/dit-dah-go/signaling-server
+cd signaling-server
 podman build -t ditdahgo-signaling -f Containerfile .
 ```
 
@@ -187,12 +187,12 @@ Examples:
 
 ```bash
 export SIGNAL_SERVER_URL=http://192.168.1.50:8080
-cd /Users/a220018178/Documents/personal/dit-dah-go/client
+cd client
 go run ./cmd/ditdahgo -host
 ```
 
 ```bash
-cd /Users/a220018178/Documents/personal/dit-dah-go/client
+cd client
 go run ./cmd/ditdahgo -join SESSION_ID -signal http://192.168.1.50:8080
 ```
 
