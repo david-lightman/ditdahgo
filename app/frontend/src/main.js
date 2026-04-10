@@ -25,6 +25,7 @@ const btnBindShortcutFocusKeyer = document.getElementById('btn-bind-shortcut-foc
 const btnBindShortcutFocusChat = document.getElementById('btn-bind-shortcut-focus-chat');
 const btnBindShortcutToggleMode = document.getElementById('btn-bind-shortcut-toggle-mode');
 const btnBindShortcutSettings = document.getElementById('btn-bind-shortcut-settings');
+const btnBindShortcutGlossary = document.getElementById('btn-bind-shortcut-glossary');
 const btnBindShortcutQuit = document.getElementById('btn-bind-shortcut-quit');
 const btnResetShortcuts = document.getElementById('btn-reset-shortcuts');
 const btnToggleLocalAudio = document.getElementById('btn-toggle-local-audio');
@@ -61,6 +62,7 @@ const displayShortcutFocusKeyer = document.getElementById('display-shortcut-focu
 const displayShortcutFocusChat = document.getElementById('display-shortcut-focus-chat');
 const displayShortcutToggleMode = document.getElementById('display-shortcut-toggle-mode');
 const displayShortcutSettings = document.getElementById('display-shortcut-settings');
+const displayShortcutGlossary = document.getElementById('display-shortcut-glossary');
 const displayShortcutQuit = document.getElementById('display-shortcut-quit');
 const displayWpm = document.getElementById('display-wpm');
 const displayLocalFrequency = document.getElementById('display-local-frequency');
@@ -106,6 +108,7 @@ const defaultShortcutConfig = {
     focusChat: { key: 'c', shift: true, alt: false },
     toggleMode: { key: 'm', shift: true, alt: false },
     openSettings: { key: ',', shift: false, alt: false },
+    openGlossary: { key: 'g', shift: false, alt: false },
     quitApp: { key: 'q', shift: false, alt: false },
 };
 const defaultAudioConfig = {
@@ -123,7 +126,7 @@ const defaultDisplayConfig = {
     chatFontSize: 15,
     cwChatPauseMs: 3000,
 };
-const defaultGlossaryWidth = 390;
+const defaultGlossaryWidth = 410;
 const minGlossaryWidth = 320;
 const maxGlossaryWidth = 560;
 const cwUnknownToken = '<?>';
@@ -222,7 +225,7 @@ let localOscillator = null;
 let localGainNode = null;
 let activityLogCount = 0;
 let activeGlossarySectionId = 'alphabet';
-let glossaryVisible = true;
+let glossaryVisible = false;
 let glossaryWidth = readGlossaryWidth();
 let localPlaybackQueue = Promise.resolve();
 let remotePlaybackQueue = Promise.resolve();
@@ -386,13 +389,10 @@ btnBindShortcutFocusKeyer.addEventListener('click', () => beginShortcutBinding('
 btnBindShortcutFocusChat.addEventListener('click', () => beginShortcutBinding('focusChat'));
 btnBindShortcutToggleMode.addEventListener('click', () => beginShortcutBinding('toggleMode'));
 btnBindShortcutSettings.addEventListener('click', () => beginShortcutBinding('openSettings'));
+btnBindShortcutGlossary.addEventListener('click', () => beginShortcutBinding('openGlossary'));
 btnBindShortcutQuit.addEventListener('click', () => beginShortcutBinding('quitApp'));
 btnResetShortcuts.addEventListener('click', () => {
-    Object.assign(savedShortcutConfig, cloneShortcutConfig(defaultShortcutConfig));
-    pendingShortcutBind = '';
-    shortcutNotice = 'Shortcut defaults restored.';
-    persistShortcutConfig();
-    renderShortcutConfig();
+    resetAllDefaults();
 });
 
 selectKeyingMode.addEventListener('change', () => {
@@ -874,11 +874,11 @@ function renderKeyConfig() {
     displayDitKey.innerText = humanizeCode(savedKeyConfig.ditKey);
     displayDahKey.innerText = humanizeCode(savedKeyConfig.dahKey);
     displayWpm.innerText = savedKeyConfig.wpm + ' WPM';
-    wpmPill.innerText = savedKeyConfig.wpm + ' WPM';
-    keyingModeBadge.innerText = savedKeyConfig.mode === 'straight' ? 'Straight key' : 'Iambic';
-    keyingSummary.innerText = savedKeyConfig.mode === 'straight'
+    wpmPill.innerText = 'WPM: ' + savedKeyConfig.wpm;
+    keyingModeBadge.innerText = 'Key Type: ' + (savedKeyConfig.mode === 'straight' ? 'Straight key' : 'Iambic');
+    keyingSummary.innerText = 'Bindings: ' + (savedKeyConfig.mode === 'straight'
         ? humanizeCode(savedKeyConfig.straightKey)
-        : humanizeCode(savedKeyConfig.ditKey) + ' / ' + humanizeCode(savedKeyConfig.dahKey);
+        : humanizeCode(savedKeyConfig.ditKey) + ' / ' + humanizeCode(savedKeyConfig.dahKey));
     keyingStatus.innerText = pendingKeyBind
         ? 'Press a key to bind ' + bindingLabel(pendingKeyBind) + '.'
         : savedKeyConfig.mode === 'straight'
@@ -893,6 +893,7 @@ function renderShortcutConfig() {
     displayShortcutFocusChat.innerText = humanizeShortcut(savedShortcutConfig.focusChat);
     displayShortcutToggleMode.innerText = humanizeShortcut(savedShortcutConfig.toggleMode);
     displayShortcutSettings.innerText = humanizeShortcut(savedShortcutConfig.openSettings);
+    displayShortcutGlossary.innerText = humanizeShortcut(savedShortcutConfig.openGlossary);
     displayShortcutQuit.innerText = isMacOS ? 'System Cmd+Q' : humanizeShortcut(savedShortcutConfig.quitApp);
     btnBindShortcutQuit.disabled = isMacOS;
     shortcutStatus.innerText = pendingShortcutBind
@@ -969,6 +970,12 @@ function getActiveGlossarySection() {
 function setGlossaryVisible(visible) {
     glossaryVisible = visible;
     renderGlossaryVisibility();
+}
+
+function openGlossaryPanel() {
+    setGlossaryVisible(true);
+    const activeButton = glossaryTabs.querySelector('.glossary-tab-button.is-active') || glossaryTabs.querySelector('.glossary-tab-button');
+    activeButton?.focus();
 }
 
 function renderGlossaryVisibility() {
@@ -1331,6 +1338,7 @@ function cloneShortcutConfig(config) {
         focusChat: { ...config.focusChat },
         toggleMode: { ...config.toggleMode },
         openSettings: { ...config.openSettings },
+        openGlossary: { ...config.openGlossary },
         quitApp: { ...config.quitApp },
     };
 }
@@ -1380,6 +1388,9 @@ function shortcutBindingLabel(target) {
     }
     if (target === 'openSettings') {
         return 'Open settings';
+    }
+    if (target === 'openGlossary') {
+        return 'Open glossary';
     }
     return 'Quit app';
 }
@@ -1513,6 +1524,12 @@ function handleAppShortcut(event) {
         return true;
     }
 
+    if (matchesShortcut(event, savedShortcutConfig.openGlossary)) {
+        event.preventDefault();
+        openGlossaryPanel();
+        return true;
+    }
+
     if (!isMacOS && matchesShortcut(event, savedShortcutConfig.quitApp)) {
         event.preventDefault();
         Quit();
@@ -1585,6 +1602,52 @@ function focusChatInput() {
 
 function focusKeyerSurface() {
     btnKeySurface.focus();
+}
+
+function resetAllDefaults() {
+    Object.assign(savedKeyConfig, { ...defaultKeyConfig });
+    Object.assign(savedShortcutConfig, cloneShortcutConfig(defaultShortcutConfig));
+    Object.assign(savedAudioConfig, { ...defaultAudioConfig });
+    Object.assign(savedDisplayConfig, { ...defaultDisplayConfig });
+    for (const key of Object.keys(savedGlossaryMnemonics)) {
+        delete savedGlossaryMnemonics[key];
+    }
+
+    glossaryVisible = false;
+    glossaryWidth = defaultGlossaryWidth;
+    activeGlossarySectionId = 'alphabet';
+    pendingKeyBind = '';
+    pendingShortcutBind = '';
+    shortcutNotice = 'All defaults restored.';
+
+    inputSignalUrl.value = defaultSignalUrl;
+    inputDisplayName.value = '';
+    selectKeyingMode.value = savedKeyConfig.mode;
+    inputWpm.value = String(savedKeyConfig.wpm);
+    inputLocalFrequency.value = String(savedAudioConfig.localFrequency);
+    inputLocalVolume.value = String(savedAudioConfig.localVolume);
+    inputRemoteFrequency.value = String(savedAudioConfig.remoteFrequency);
+    inputRemoteVolume.value = String(savedAudioConfig.remoteVolume);
+    inputChatFontSize.value = String(savedDisplayConfig.chatFontSize);
+    inputCWChatPauseMs.value = String(savedDisplayConfig.cwChatPauseMs);
+
+    window.localStorage.removeItem('displayName');
+    window.localStorage.removeItem('signalServerURL');
+    persistKeyConfig();
+    persistShortcutConfig();
+    persistAudioConfig();
+    persistDisplayConfig();
+    persistGlossaryMnemonics();
+    persistGlossaryWidth();
+
+    stopIambicLoop();
+    cancelActiveKeying();
+    renderKeyConfig();
+    renderShortcutConfig();
+    renderAudioConfig();
+    renderDisplayConfig();
+    renderGlossaryPanel();
+    applyGlossaryWidth();
 }
 
 function adjustWPM(delta) {
@@ -2281,6 +2344,7 @@ function createDefaultGlossarySections() {
             entries: [
                 createGlossaryEntry('CQ', 'Calling any station'),
                 createGlossaryEntry('DE', 'This is'),
+                createGlossaryEntry('HI HI', 'Laugh'),
                 createGlossaryEntry('BK', 'Back to you'),
                 createGlossaryEntry('KN', 'Over to named station only'),
                 createGlossaryEntry('R', 'Received'),

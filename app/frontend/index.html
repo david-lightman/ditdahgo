@@ -33,7 +33,7 @@
 
             <div class="field-stack">
                 <label for="input-display-name">Your name or callsign</label>
-                <input type="text" id="input-display-name" placeholder="N4JMS" autocomplete="off" maxlength="32">
+                <input type="text" id="input-display-name" placeholder="CALLSIGN" autocomplete="off" maxlength="32">
             </div>
 
             <div class="connection-actions">
@@ -204,7 +204,6 @@
                 <label>Stream local CW to chat</label>
                 <div class="binding-row">
                     <button id="btn-toggle-stream-local-cw" class="secondary-button" type="button">Off</button>
-                    <span class="binding-value">Local only</span>
                 </div>
             </div>
 
@@ -212,7 +211,6 @@
                 <label>Stream remote CW to chat</label>
                 <div class="binding-row">
                     <button id="btn-toggle-stream-remote-cw" class="secondary-button" type="button">Off</button>
-                    <span class="binding-value">Remote only</span>
                 </div>
             </div>
 
@@ -264,6 +262,11 @@
                 <button id="btn-bind-shortcut-settings" class="shortcut-row" type="button">
                     <span class="shortcut-row-label">Open settings</span>
                     <span id="display-shortcut-settings" class="shortcut-row-value">Cmd/Ctrl+,</span>
+                </button>
+
+                <button id="btn-bind-shortcut-glossary" class="shortcut-row" type="button">
+                    <span class="shortcut-row-label">Open glossary</span>
+                    <span id="display-shortcut-glossary" class="shortcut-row-value">Cmd/Ctrl+G</span>
                 </button>
 
                 <button id="btn-bind-shortcut-quit" class="shortcut-row" type="button">
@@ -345,9 +348,9 @@
 
                     <div class="key-surface-card key-surface-card-compact">
                         <div class="key-surface-meta">
-                            <span id="keying-mode-badge" class="mode-badge mode-badge-active">Straight key</span>
-                            <span id="wpm-pill" class="wpm-pill">18 WPM</span>
-                            <span id="keying-summary" class="mode-badge mode-badge-live">Right Shift</span>
+                            <span id="keying-mode-badge" class="mode-badge mode-badge-active">Key Type: Straight key</span>
+                            <span id="wpm-pill" class="wpm-pill">WPM: 18</span>
+                            <span id="keying-summary" class="mode-badge mode-badge-live">Bindings: Right Shift</span>
                         </div>
                         <button id="btn-key-surface" class="key-surface key-surface-compact" type="button">
                             <div class="key-surface-lights" aria-hidden="true">
